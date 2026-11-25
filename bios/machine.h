@@ -40,6 +40,7 @@
 #define SCSI_BUS            1
 #define IDE_BUS             2
 #define SDMMC_BUS           3
+#define ROMDISK_BUS         4
 
 #if CONF_WITH_SDMMC
 # define MAX_BUS            SDMMC_BUS

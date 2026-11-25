@@ -55,6 +55,7 @@ help:
 	@echo "firebee $(SREC_FIREBEE), to be flashed on the FireBee"
 	@echo "firebee-prg emutos.prg, a RAM tos for the FireBee"
 	@echo "amiga   $(ROM_AMIGA), EmuTOS ROM for Amiga hardware"
+	@echo "amiga512 $(ROM_AMIGA512), 512 KB EmuTOS ROM for Amiga with ROM disk $(ROMDISK_IMG)"
 	@echo "amigavampire $(VAMPIRE_ROM_AMIGA), EmuTOS ROM for Amiga optimized for Vampire V2"
 	@echo "v4sa    $(V4_ROM_AMIGA), EmuTOS ROM for Amiga Vampire V4 Standalone"
 	@echo "amigakd $(AMIGA_KICKDISK), EmuTOS as Amiga 1000 Kickstart disk"
@@ -308,6 +309,7 @@ bios_src +=  memory.S processor.S vectors.S aciavecs.S bios.c xbios.c acsi.c \
              amiga.c amiga2.S spi_vamp.c \
              lisa.c lisa2.S \
              delay.c delayasm.S sd.c memory2.c bootparams.c scsi.c nova.c \
+             romdisk.c romdiskimg.S \
              dsp.c dsp2.S \
              scsidriv.c
 
@@ -321,7 +323,7 @@ endif
 
 bdos_src = bdosmain.c console.c fsbuf.c fsdir.c fsdrive.c fsfat.c fsglob.c \
            fshand.c fsio.c fsmain.c fsopnclo.c iumem.c kpgmld.c osmem.c \
-           proc.c rwa.S time.c umem.c
+           proc.c rwa.S time.c umem.c amigafs.c
 
 #
 # source code in util/
@@ -641,6 +643,7 @@ TOCLEAN += *.rom
 
 ROM_AMIGA = emutos-amiga.rom
 AMIGA_DEFS =
+AMIGA_ROMSIZE = 256k
 
 .PHONY: amiga
 NODEP += amiga
@@ -649,11 +652,23 @@ amiga: OPTFLAGS = $(SMALL_OPTFLAGS)
 amiga: override DEF += -DTARGET_AMIGA_ROM $(AMIGA_DEFS)
 amiga:
 	@echo "# Building Amiga EmuTOS into $(ROM_AMIGA)"
-	$(MAKE) CPUFLAGS='$(CPUFLAGS)' DEF='$(DEF)' OPTFLAGS='$(OPTFLAGS)' UNIQUE=$(UNIQUE) ROM_AMIGA=$(ROM_AMIGA) $(ROM_AMIGA) REF_OS=TOS206
+	$(MAKE) CPUFLAGS='$(CPUFLAGS)' DEF='$(DEF)' OPTFLAGS='$(OPTFLAGS)' UNIQUE=$(UNIQUE) ROM_AMIGA=$(ROM_AMIGA) AMIGA_ROMSIZE=$(AMIGA_ROMSIZE) $(ROM_AMIGA) REF_OS=TOS206
 	@printf "$(LOCALCONFINFO)"
 
 $(ROM_AMIGA): emutos.img mkrom
-	./mkrom amiga $< $(ROM_AMIGA)
+	./mkrom amiga $< $(ROM_AMIGA) $(AMIGA_ROMSIZE)
+
+# 512 KB Amiga ROM with a read-only disk image linked in
+
+ROM_AMIGA512 = emutos-amiga512.rom
+ROMDISK_IMG = romdisk.img
+
+.PHONY: amiga512
+NODEP += amiga512
+amiga512: override DEF += -DAMIGA_ROM_SIZE_KB=512 -DCONF_WITH_ROMDISK=1 -DCONF_WITH_AMIGA_FS=1
+amiga512: AMIGA_ROMSIZE = 512k
+amiga512: ROM_AMIGA = $(ROM_AMIGA512)
+amiga512: amiga
 
 # Special Amiga ROM optimized for Vampire V2
 
@@ -1248,6 +1263,10 @@ obj/%.o : %.c
 obj/%.o : %.S
 	$(CC) $(SFILE_FLAGS) -c $< -o $@
 
+# The ROM disk image is only included when CONF_WITH_ROMDISK is enabled
+obj/romdiskimg.o : bios/romdiskimg.S $(wildcard $(ROMDISK_IMG))
+	$(CC) $(SFILE_FLAGS) -DROMDISK_IMAGE='"$(abspath $(ROMDISK_IMG))"' -c $< -o $@
+
 #
 # version string
 #
@@ -1397,7 +1416,7 @@ endif
 .PHONY: clean
 NODEP += clean
 clean:
-	rm -f $(TOCLEAN)
+	rm -f $(filter-out $(ROMDISK_IMG),$(wildcard $(TOCLEAN)))
 	@for dir in $(wildcard tests/*/Makefile) ; do \
 		$(MAKE) -C $$(dirname $$dir) clean ; \
 	done

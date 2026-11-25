@@ -191,11 +191,23 @@ struct IDE
 
 #define ide_interface           ((volatile struct IDE *)0xfff00000)
 
+#elif defined(MACHINE_AMIGA)
+
+/* interface 0 is Gayle IDE (A600/A1200), interface 1 the TF4060 IDE port */
+#define NUM_IDE_INTERFACES  2
+static volatile struct IDE * const ide_base[NUM_IDE_INTERFACES] =
+    { ide_interface, tf4060_ide_interface };
+#define IDE_BASE(i)         ide_base[i]
+
 #else
 
 #define NUM_IDE_INTERFACES  1
 
 #endif /* CONF_ATARI_HARDWARE */
+
+#ifndef IDE_BASE
+#define IDE_BASE(i)         (ide_interface + (i))
+#endif
 
 
 /* IDE defines */
@@ -556,12 +568,12 @@ BOOL detect_ide(void)
     for (i = 0; i < NUM_IDE_INTERFACES; i++)
     {
         /* initialize base addresses for IDE interface */
-        ifinfo[i].base_address = ide_interface + i;
+        ifinfo[i].base_address = IDE_BASE(i);
         ifinfo[i].twisted_cable = FALSE;
     }
 
 #ifdef MACHINE_AMIGA
-    has_ide = has_gayle ? 0x01 : 0x00;
+    has_ide = (has_gayle ? 0x01 : 0x00) | (has_tf4060_ide ? 0x02 : 0x00);
 #elif defined(MACHINE_M548X)
     has_ide = 0x01;
 #elif defined(MACHINE_FIREBEE)

@@ -26,6 +26,7 @@
 #include "acsi.h"
 #include "scsi.h"
 #include "sd.h"
+#include "romdisk.h"
 #include "../bdos/bdosstub.h"
 #include "string.h"
 
@@ -115,7 +116,10 @@ static const int majors[] =
     0, 1, 2, 3, 4, 5, 6, 7,             /* ACSI */
 #endif
 #if CONF_WITH_SDMMC
-    24, 25, 26, 27, 28, 29, 30, 31      /* SD/MMC */
+    24, 25, 26, 27, 28, 29, 30, 31,     /* SD/MMC */
+#endif
+#if CONF_WITH_ROMDISK
+    32,                                 /* ROM disk */
 #endif
 };
 
@@ -416,6 +420,11 @@ LONG disk_mediach(UWORD unit)
         ret = sd_ioctl(reldev,GET_MEDIACHANGE,NULL);
         break;
 #endif /* CONF_WITH_SDMMC */
+#if CONF_WITH_ROMDISK
+    case ROMDISK_BUS:
+        ret = romdisk_ioctl(reldev,GET_MEDIACHANGE,NULL);
+        break;
+#endif /* CONF_WITH_ROMDISK */
     default:
         ret = EUNDEV;
     }
@@ -844,6 +853,155 @@ static WORD process_dos_mbr(UWORD unit, LONG *devices_available)
  * scans for Atari partitions on unit and adds them to blkdev array
  *
  */
+#if CONF_WITH_AMIGA_FS
+
+/*
+ * Amiga Rigid Disk Block support
+ *
+ * The RDB lives in one of the first RDB_LOCATION_LIMIT blocks of the disk
+ * and points to a linked list of PART blocks, each holding a DosEnvec that
+ * describes the partition geometry and filesystem type.
+ */
+#define RDB_LOCATION_LIMIT  16
+#define IDNAME_RIGIDDISK    0x5244534bUL    /* 'RDSK' */
+#define IDNAME_PARTITION    0x50415254UL    /* 'PART' */
+#define RDB_END             0xffffffffUL
+#define PBFF_NOMOUNT        0x00000002UL
+
+/* longword offsets within RDSK & PART blocks */
+#define RDB_SUMMEDLONGS     1
+#define RDSK_PARTITIONLIST  7
+#define PART_NEXT           4
+#define PART_FLAGS          5
+#define PART_ENVIRONMENT    32
+
+/* longword offsets within a DosEnvec */
+#define DE_TABLESIZE        0
+#define DE_SIZEBLOCK        1
+#define DE_SURFACES         3
+#define DE_SECTORPERBLOCK   4
+#define DE_BLOCKSPERTRACK   5
+#define DE_RESERVED         6
+#define DE_LOWCYL           9
+#define DE_HIGHCYL          10
+#define DE_DOSTYPE          16
+
+#define DEFAULT_DOSTYPE     0x444f5300UL    /* 'DOS\0' */
+
+/*
+ * check the id and checksum of an RDB block
+ */
+static BOOL rdb_block_valid(const ULONG *blk, ULONG id)
+{
+    ULONG i, n, sum;
+
+    if (blk[0] != id)
+        return FALSE;
+
+    n = blk[RDB_SUMMEDLONGS];
+    if ((n <= RDB_SUMMEDLONGS) || (n > SECTOR_SIZE/sizeof(ULONG)))
+        return FALSE;
+
+    for (i = 0, sum = 0; i < n; i++)
+        sum += blk[i];
+
+    return sum == 0;
+}
+
+/*
+ * add the partition described by a PART block
+ *
+ * returns -1 iff no more partitions can be added
+ */
+static int add_rdb_partition(UWORD unit, LONG *devices_available, const ULONG *part)
+{
+    const ULONG *env = part + PART_ENVIRONMENT;
+    AMIGA_PARTINFO info;
+    ULONG secsize, secs_per_cyl, secs_per_block;
+    char id[3];
+
+    if (part[PART_FLAGS] & PBFF_NOMOUNT)
+        return 0;
+
+    /*
+     * de_SizeBlock is the size of the geometry unit, de_SectorPerBlock
+     * the number of those per filesystem block; both must map onto whole
+     * physical sectors
+     */
+    secsize = env[DE_SIZEBLOCK] * sizeof(ULONG);
+    if ((secsize < SECTOR_SIZE) || (secsize % SECTOR_SIZE)
+     || (env[DE_HIGHCYL] < env[DE_LOWCYL]))
+        return 0;
+    secs_per_block = env[DE_SECTORPERBLOCK] ? env[DE_SECTORPERBLOCK] : 1;
+    if (get_shift(secsize * secs_per_block) < 0
+     || (secsize * secs_per_block > MAX_LOGSEC_SIZE))
+        return 0;
+
+    info.blocksize = secsize * secs_per_block;
+    info.reserved = env[DE_RESERVED];
+    info.dostype = (env[DE_TABLESIZE] >= DE_DOSTYPE) ? env[DE_DOSTYPE] : DEFAULT_DOSTYPE;
+
+    secs_per_cyl = env[DE_SURFACES] * env[DE_BLOCKSPERTRACK] * (secsize / SECTOR_SIZE);
+    info.blocks = (env[DE_HIGHCYL] - env[DE_LOWCYL] + 1) * secs_per_cyl
+                    / (info.blocksize / SECTOR_SIZE);
+
+    /* the XHDI partition id is the first three characters of the DosType */
+    id[0] = info.dostype >> 24;
+    id[1] = info.dostype >> 16;
+    id[2] = info.dostype >> 8;
+    KINFO((" %c%c%c\\%d", id[0], id[1], id[2], (int)(info.dostype & 0xff)));
+
+    return add_amiga_partition(unit, devices_available, id,
+                               env[DE_LOWCYL] * secs_per_cyl,
+                               info.blocks * (info.blocksize / SECTOR_SIZE), &info);
+}
+
+/*
+ * look for an Amiga Rigid Disk Block and add the partitions it lists
+ *
+ * returns 1 if an RDB was found, 0 otherwise
+ */
+static int amiga_rdb_partitions(UWORD unit, LONG *devices_available)
+{
+    ULONG *blk = (ULONG *)physsect2.sect;
+    ULONG n, part;
+
+    if (units[unit].psshift != get_shift(SECTOR_SIZE))
+        return 0;
+
+    for (n = 0; n < RDB_LOCATION_LIMIT; n++)
+    {
+        if (disk_rw(unit, RW_READ, n, 1, (UBYTE *)blk))
+            return 0;
+        if (rdb_block_valid(blk, IDNAME_RIGIDDISK))
+            break;
+    }
+    if (n == RDB_LOCATION_LIMIT)
+        return 0;
+
+    KINFO((" RDB<"));
+
+    /*
+     * walk the partition list; the list cannot legitimately be longer than
+     * the number of blocks on the unit, which protects us against loops
+     */
+    for (part = blk[RDSK_PARTITIONLIST], n = 0; (part != RDB_END) && (n < units[unit].size); n++)
+    {
+        if (disk_rw(unit, RW_READ, part, 1, (UBYTE *)blk)
+         || !rdb_block_valid(blk, IDNAME_PARTITION))
+            break;
+        if (add_rdb_partition(unit, devices_available, blk) < 0)
+            break;  /* max number of partitions reached */
+        part = blk[PART_NEXT];
+    }
+
+    KINFO((" >\n"));
+
+    return 1;
+}
+
+#endif /* CONF_WITH_AMIGA_FS */
+
 static int atari_partition(UWORD unit,LONG *devices_available)
 {
     UBYTE *sect = physsect.sect;
@@ -861,7 +1019,12 @@ static int atari_partition(UWORD unit,LONG *devices_available)
     if (disk_rw(unit, RW_READ, 0, 1, sect))
         return -1;
 
-    KINFO(("%cd%c: ","ashf????"[major>>3],'a'+(major&0x07)));
+    KINFO(("%cd%c: ","ashfr???"[major>>3],'a'+(major&0x07)));
+
+#if CONF_WITH_AMIGA_FS
+    if (amiga_rdb_partitions(unit, devices_available))
+        return 1;
+#endif
 
 #if CONF_WITH_IDE
     /* IDE drives may be byteswapped if partitioned on foreign hardware */
@@ -1061,6 +1224,11 @@ static LONG internal_inquire(UWORD unit, ULONG *blocksize, ULONG *deviceflags, c
         flags = XH_TARGET_REMOVABLE;    /* medium is removable */
         break;
 #endif /* CONF_WITH_SDMMC */
+#if CONF_WITH_ROMDISK
+    case ROMDISK_BUS:
+        ret = romdisk_ioctl(reldev,GET_DISKNAME,name);
+        break;
+#endif /* CONF_WITH_ROMDISK */
     default:
         ret = EUNDEV;
     }
@@ -1161,6 +1329,14 @@ LONG disk_get_capacity(UWORD unit, ULONG *blocks, ULONG *blocksize)
             return ret;
         break;
 #endif /* CONF_WITH_SDMMC */
+#if CONF_WITH_ROMDISK
+    case ROMDISK_BUS:
+        ret = romdisk_ioctl(reldev,GET_DISKINFO,info);
+        KDEBUG(("romdisk_ioctl(%d) returned %ld\n", reldev, ret));
+        if (ret < 0)
+            return ret;
+        break;
+#endif /* CONF_WITH_ROMDISK */
     default:
         return EUNDEV;
     }
@@ -1229,6 +1405,12 @@ LONG disk_rw(UWORD unit, UWORD rw, ULONG sector, UWORD count, UBYTE *buf)
         KDEBUG(("sd_rw() returned %ld\n", ret));
         break;
 #endif /* CONF_WITH_SDMMC */
+#if CONF_WITH_ROMDISK
+    case ROMDISK_BUS:
+        ret = romdisk_rw(rw, sector, count, buf, reldev);
+        KDEBUG(("romdisk_rw() returned %ld\n", ret));
+        break;
+#endif /* CONF_WITH_ROMDISK */
     default:
         ret = EUNDEV;
     }

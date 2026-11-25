@@ -19,13 +19,21 @@
 
 #define DEVICES_PER_BUS     8
 
-#define UNITSNUM            (NUMFLOPPIES+(DEVICES_PER_BUS*(MAX_BUS+1)))
+/* highest bus number handled by the disk layer */
+#if CONF_WITH_ROMDISK
+# define MAX_DISK_BUS       ROMDISK_BUS
+#else
+# define MAX_DISK_BUS       MAX_BUS
+#endif
+
+#define UNITSNUM            (NUMFLOPPIES+(DEVICES_PER_BUS*(MAX_DISK_BUS+1)))
 
 #define GET_BUS(major)          ((major)/DEVICES_PER_BUS)
 #define IS_ACSI_DEVICE(major)   (GET_BUS(major) == ACSI_BUS)
 #define IS_SCSI_DEVICE(major)   (GET_BUS(major) == SCSI_BUS)
 #define IS_IDE_DEVICE(major)    (GET_BUS(major) == IDE_BUS)
 #define IS_SDMMC_DEVICE(major)  (GET_BUS(major) == SDMMC_BUS)
+#define IS_ROMDISK_DEVICE(major) (GET_BUS(major) == ROMDISK_BUS)
 
 #define GET_UNITNUM(bus,dev)    (NUMFLOPPIES+(DEVICES_PER_BUS*(bus))+dev)
 

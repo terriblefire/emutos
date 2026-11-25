@@ -19,9 +19,6 @@
 #include "intmath.h"
 
 
-#define CNTMAX  0x7FFFul  /* 16-bit MAXINT */
-
-
 /*
  * addit - update the OFD for the file
  *
@@ -54,7 +51,7 @@ static void addit(OFD *p, long siz)
  *       executed if the BIOS returns an error, therefore usrio() does
  *       not need to return any error codes.
  */
-static void usrio(int rwflg, int num, long strt, char *ubuf, DMD *dm)
+void usrio(int rwflg, int num, long strt, char *ubuf, DMD *dm)
 {
     BCB *b;
 
@@ -360,6 +357,9 @@ long ixlseek(OFD *p,long n)
     if ((n < 0) || (n > dfd->o_fileln))
         return ERANGE;
 
+    if (IS_AMIGA_DMD(dm))       /* amifs_read() works from o_bytnum */
+        return p->o_bytnum = n;
+
     if (n == 0)
     {
         p->o_curcl = p->o_currec = p->o_bytnum = p->o_curbyt = 0;
@@ -507,10 +507,13 @@ long ixread(OFD *p, long len, void *ubufr)
     if (len > (maxlen = p->o_dfd->o_fileln - p->o_bytnum))
         len = maxlen;
 
-    if (len > 0)
-        return(xrw(0,p,len,ubufr));
+    if (len <= 0)
+        return 0L;
 
-    return(0L); /* zero bytes read for zero requested */
+    if (IS_AMIGA_DMD(p->o_dmd))
+        return amifs_read(p,len,ubufr);
+
+    return xrw(0,p,len,ubufr);
 }
 
 
@@ -553,5 +556,8 @@ long xwrite(int h, long len, void *ubufr)
 
 long ixwrite(OFD *p, long len, void *ubufr)
 {
+    if (IS_AMIGA_DMD(p->o_dmd))     /* Amiga volumes are read-only */
+        return EACCDN;
+
     return(xrw(1,p,len,ubufr));
 }

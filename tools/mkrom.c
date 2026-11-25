@@ -457,12 +457,12 @@ static int compute_amiga_checksum(FILE* file, const char* filename, size_t files
 
 /* Amiga ROM image */
 static int cmd_amiga(FILE* infile, const char* infilename,
-                     FILE* outfile, const char* outfilename)
+                     FILE* outfile, const char* outfilename,
+                     size_t target_size)
 {
     int i;
     size_t nwrite;
     size_t source_size;
-    size_t target_size = 256 * 1024;
     struct amiga_rom_footer footer;
     size_t max_size = target_size - sizeof footer;
     size_t free_size;
@@ -1113,12 +1113,25 @@ int main(int argc, char* argv[])
         infilename = argv[2];
         outfilename = argv[3];
     }
-    else if (argc == 4 && !strcmp(argv[1], "amiga"))
+    else if ((argc == 4 || argc == 5) && !strcmp(argv[1], "amiga"))
     {
         op = CMD_AMIGA;
         infilename = argv[2];
         outfilename = argv[3];
         outmode = "w+b"; /* Computing the checksum requires read/write */
+
+        target_size = 256 * 1024;
+        if (argc == 5)
+        {
+            target_size = get_size_value(argv[4]);
+            if (target_size == SIZE_ERROR)
+                return 1;
+            if (target_size != 256 * 1024 && target_size != 512 * 1024)
+            {
+                fprintf(stderr, "%s: Amiga ROM size must be 256k or 512k\n", g_argv0);
+                return 1;
+            }
+        }
     }
     else if (argc == 4 && !strcmp(argv[1], "amiga-kickdisk"))
     {
@@ -1159,7 +1172,7 @@ int main(int argc, char* argv[])
         fprintf(stderr, "  %s stc <source.img> <destination.stc>\n", g_argv0);
         fprintf(stderr, "\n");
         fprintf(stderr, "  # Amiga ROM image\n");
-        fprintf(stderr, "  %s amiga <source.img> <destination.rom>\n", g_argv0);
+        fprintf(stderr, "  %s amiga <source.img> <destination.rom> [256k|512k]\n", g_argv0);
         fprintf(stderr, "\n");
         fprintf(stderr, "  # Amiga 1000 Kickstart disk\n");
         fprintf(stderr, "  %s amiga-kickdisk <source.rom> <destination.adf>\n", g_argv0);
@@ -1220,7 +1233,7 @@ int main(int argc, char* argv[])
         break;
 
         case CMD_AMIGA:
-            ret = cmd_amiga(infile, infilename, outfile, outfilename);
+            ret = cmd_amiga(infile, infilename, outfile, outfilename, target_size);
         break;
 
         case CMD_AMIGA_KICKDISK:

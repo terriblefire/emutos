@@ -15,6 +15,7 @@
 #define BLKDEV_H
 
 #include "biosdefs.h"
+#include "biosext.h"
 
 /*
  * defines
@@ -111,6 +112,9 @@ UWORD compute_cksum(const UWORD *buf);
 WORD get_shift(ULONG blocksize);
 
 int add_partition(UWORD unit, LONG *devices_available, char id[], ULONG start, ULONG size);
+#if CONF_WITH_AMIGA_FS
+int add_amiga_partition(UWORD unit, LONG *devices_available, char id[], ULONG start, ULONG size, const AMIGA_PARTINFO *info);
+#endif
 
 /* critical error handling */
 LONG call_etv_critic(WORD error,WORD device);   /* in vectors.S */
@@ -133,6 +137,7 @@ LONG call_etv_critic(WORD error,WORD device);   /* in vectors.S */
  */
 #define DEVICE_VALID    0x01    /* device valid */
 #define GETBPB_ALLOWED  0x02    /* this device supports GetBPB() */
+#define AMIGA_PARTITION 0x04    /* partition from an Amiga RDB, see 'amiga' */
 
 
 /*
@@ -161,6 +166,9 @@ struct _blkdev
     UBYTE       serial2[4];     /* serial number 2 (MSDOS) from the bootsector */
     int         unit;           /* 0,1 = floppies, 2-9 = ACSI, 10-17 = SCSI, */
                                 /*  18-25 = IDE, 26-33 = SD/MMC              */
+#if CONF_WITH_AMIGA_FS
+    AMIGA_PARTINFO amiga;       /* valid iff flags & AMIGA_PARTITION */
+#endif
 };
 typedef struct _blkdev  BLKDEV;
 

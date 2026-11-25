@@ -22,7 +22,9 @@
  * Precomputed value of log2(8/v_planes), used to derive v_planes_shift.
  * Only the indexes 1, 2 and 4 are meaningful (see set_screen_shift()).
  */
+#if !CONF_WITH_LINE_INTERLEAVED_PLANES
 static const UBYTE shift_offset[5] = {0, 3, 2, 0, 1};
+#endif
 
 /*
  * Current shift value, used to speed up calculations; changed when v_planes
@@ -41,7 +43,12 @@ UBYTE v_planes_shift;
  */
 void set_screen_shift(void)
 {
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+    /* plane 0 of a scan line is contiguous: 2 bytes per 16 pixels */
+    v_planes_shift = 3;
+#else
     v_planes_shift = (v_planes > 4) ? 0 : shift_offset[v_planes];
+#endif
 }
 
 /*

@@ -47,7 +47,7 @@ LONG video_ram_size;        /* these are used by Srealloc() */
 void *video_ram_addr;
 #endif
 
-#if CONF_WITH_ATARI_VIDEO
+#if CONF_WITH_ATARI_VIDEO || defined(MACHINE_AMIGA)
 
 /* Define palette */
 
@@ -57,6 +57,10 @@ static const UWORD dflt_palette[] = {
     RGB_GRAY, RGB_LTRED, RGB_LTGREEN, RGB_LTYELLOW,
     RGB_LTBLUE, RGB_LTMAGENTA, RGB_LTCYAN, RGB_BLACK
 };
+
+#endif
+
+#if CONF_WITH_ATARI_VIDEO
 
 /*
  * Initialise ST(e) palette registers
@@ -622,6 +626,12 @@ void screen_init_mode(void)
     MAYBE_UNUSED(get_default_palmode);
 
 #ifdef MACHINE_AMIGA
+    {
+        WORD i;
+
+        for (i = 0; i < ARRAY_SIZE(dflt_palette); i++)
+            amiga_setcolor(i, dflt_palette[i]);
+    }
     amiga_screen_init();
 #endif
 
@@ -831,7 +841,7 @@ void screen_get_current_mode_info(UWORD *planes, UWORD *hz_rez, UWORD *vt_rez)
 WORD get_palette(void)
 {
 #ifdef MACHINE_AMIGA
-    return 2;               /* we currently only support monochrome */
+    return (amiga_screen_planes == 1) ? 2 : 4096; /* 4 bits per colour component */
 #else
     WORD palette;
 

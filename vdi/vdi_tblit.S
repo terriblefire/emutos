@@ -138,7 +138,11 @@
         //.offset 0
 
 #define buffa   -2              //current text scratch buffer offset
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+#define nextpln -4              //offset to same word in next plane
+#else
 //#define buffb   -4              //for rotate (now unused)
+#endif
 //#define buffc   -6              //for replicate (now unused)
 #define sform   -10             //start of source form
 #define dform   -14             //start of destination form
@@ -546,7 +550,11 @@ next_plane:
         jle     no_more_planes          // loop for next plane
         movea.l sform(a6),a0
         movea.l dform(a6),a1
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+        adda.w  nextpln(a6),a1          // advance destination plane
+#else
         addq.l  #2,a1                   // advance destination plane
+#endif
         move.l  a1,dform(a6)            // save dest. starting address
         btst.b  #SKEW,STYLE+1(a6)       // only skew screws up other planes
         jeq     plane_loop              // br to short init if not skew

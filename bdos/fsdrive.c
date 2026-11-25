@@ -70,7 +70,7 @@ LONG    drvsel;
  *      returns:
  *          EDRIVE  invalid drive specified
  *          EPTHNF  unmounted removable drive specified
- *          ENSMEM  if log_media() failed (with either EDRIVE or ENSMEM), or
+ *          ENSMEM  if login_drive() failed, or
  *                  dirtbl[] is full
  *          drive nbr if success.
  */
@@ -78,7 +78,7 @@ WORD ckdrv(int d, BOOL checkrem)
 {
     int curdir;
     LONG mask;
-    BPB *b;
+    WORD rc;
 
     KDEBUG(("ckdrv(%i)\n",d));
 
@@ -93,12 +93,12 @@ WORD ckdrv(int d, BOOL checkrem)
 
     if (!(mask & drvsel))
     {       /*  drive has not been selected yet  */
-        b = (BPB *) Getbpb(d);
+        rc = login_drive(d);
 
-        if (!b)
+        if (rc > 0)
             return (mask&drvrem) ? EPTHNF : EDRIVE;
 
-        if (log_media(b,d))
+        if (rc < 0)
             return ENSMEM;
 
         drvsel |= mask;
@@ -135,11 +135,12 @@ WORD ckdrv(int d, BOOL checkrem)
 
 
 /*
-**      getdmd - allocate storage for and initialize a DMD
+**      getdmd - allocate storage for and initialize a DMD and its root DND
 */
-static DMD *getdmd(int drv)
+DMD *getdmd(int drv)
 {
     DMD *dm;
+    DND *d;
 
     KDEBUG(("getdmd(%i)\n",drv));
 
@@ -148,11 +149,12 @@ static DMD *getdmd(int drv)
 
     /*
      * no need to check the following, since MGET(DND)
-     * and MGET(OFD) only return if they succeed
+     * only returns if it succeeds
      */
-    dm->m_dtl = MGET(DND);
-    dm->m_dtl->d_ofd = MGET(OFD);
-    dm->m_fatofd = MGET(OFD);
+    dm->m_dtl = d = MGET(DND);  /*  root DND for drive          */
+    dm->m_drvnum = drv;         /*  drv nbr into media descr    */
+    d->d_drv = dm;              /*  link root DND with DMD      */
+    d->d_name[0] = 0;           /*  null out name of root       */
 
     return dm;
 }
@@ -181,7 +183,7 @@ static int log2ul(unsigned long n)
 /* b: bios parm block for drive
  * drv: drive number
  */
-WORD log_media(BPB *b, int drv)
+static WORD log_media(BPB *b, int drv)
 {
     OFD *fo, *f;                        /*  M01.01.03   */
     DFD *dfd;
@@ -206,14 +208,15 @@ WORD log_media(BPB *b, int drv)
     if (!(dm = getdmd(drv)))
         return ENSMEM;
 
+    /*
+     * no need to check the following, since MGET(OFD)
+     * only returns if it succeeds
+     */
     d = dm->m_dtl;              /*  root DND for drive          */
+    d->d_ofd = f = MGET(OFD);   /*  root dir file               */
+    dm->m_fatofd = MGET(OFD);
     dm->m_fsiz = fs;            /*  fat size                    */
-    f = d->d_ofd;               /*  root dir file               */
-    dm->m_drvnum = drv;         /*  drv nbr into media descr    */
     f->o_dmd = dm;              /*  link to OFD for rt dir file */
-
-    d->d_drv = dm;              /*  link root DND with DMD      */
-    d->d_name[0] = 0;           /*  null out name of root       */
 
     dm->m_16 = b->b_flags & B_16;       /*  set 12 or 16 bit fat flag   */
     dm->m_1fat = b->b_flags & B_1FAT;   /*  set single FAT flag         */
@@ -246,4 +249,27 @@ WORD log_media(BPB *b, int drv)
             drv, dm->m_recoff[0],dm->m_recoff[1],dm->m_recoff[2]));
 
     return E_OK;
+}
+
+
+/*
+ *  login_drive - log in the media on drive 'drv'
+ *
+ *  returns:
+ *      0   success
+ *      1   no media or no filesystem that we understand
+ *      <0  error code
+ */
+WORD login_drive(int drv)
+{
+    BPB *b = (BPB *)Getbpb(drv);
+
+    if (b)
+        return log_media(b,drv) ? ENSMEM : E_OK;
+
+#if CONF_WITH_AMIGA_FS
+    return amifs_mount(drv);
+#else
+    return 1;
+#endif
 }

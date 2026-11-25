@@ -632,6 +632,8 @@ void vdi_v_fillarea(Vwk * vwk)
 
 /*
  * get_color - Get color value of requested pixel.
+ *
+ * 'addr' points one plane past the highest-order bit_plane.
  */
 static UWORD
 get_color (UWORD mask, UWORD * addr)
@@ -641,7 +643,8 @@ get_color (UWORD mask, UWORD * addr)
 
     while(1) {
         /* test the bit. */
-        if ( *--addr & mask )
+        addr -= SCREEN_PLANE_STEP;
+        if ( *addr & mask )
             color |= 1;         /* if 1, set color accumulator bit. */
 
         if ( --plane == 0 )
@@ -683,7 +686,7 @@ pixelread(const WORD x, const WORD y)
 
     /* convert x,y to start address and bit mask */
     addr = get_start_addr(x, y);
-    addr += v_planes;                   /* start at highest-order bit_plane */
+    addr += v_planes * SCREEN_PLANE_STEP; /* start past highest-order bit_plane */
     mask = 0x8000 >> (x&0xf);           /* initial bit position in WORD */
 
     return get_color(mask, addr);       /* return the composed color value */
@@ -779,7 +782,7 @@ search_to_right (const VwkClip * clip, WORD x, UWORD mask, const UWORD search_co
         /* need to jump over interleaved bit_plane? */
         rorw1(mask);    /* rotate right */
         if ( mask & 0x8000 )
-            addr += v_planes;
+            addr += SCREEN_WORD_STEP;
 
         /* search, while pixel color != search color */
         color = get_color(mask, addr);
@@ -804,7 +807,7 @@ search_to_left (const VwkClip * clip, WORD x, UWORD mask, const UWORD search_col
         /* need to jump over interleaved bit_plane? */
         rolw1(mask);    /* rotate left */
         if ( mask & 0x0001 )
-            addr -= v_planes;
+            addr -= SCREEN_WORD_STEP;
 
         /* search, while pixel color != search color */
         color = get_color(mask, addr);
@@ -852,7 +855,7 @@ static WORD end_pts(const VwkClip *clip, WORD x, WORD y, WORD *xleftout, WORD *x
 
     /* convert x,y to start address and bit mask */
     addr = get_start_addr(x, y);
-    addr += v_planes;                   /* start at highest-order bit_plane */
+    addr += v_planes * SCREEN_PLANE_STEP; /* start past highest-order bit_plane */
     mask = 0x8000 >> (x & 0x000f);   /* fetch the pixel mask. */
 
     /* get search color and the left and right end */
@@ -1190,11 +1193,11 @@ put_pix(void)
     color = INTIN[0];           /* device dependent encoded color bits */
     mask = 0x8000 >> (x&0xf);   /* initial bit position in WORD */
 
-    for (plane = v_planes; plane; plane--) {
+    for (plane = v_planes; plane; plane--, addr += SCREEN_PLANE_STEP) {
         if (color&0x0001)
-            *addr++ |= mask;
+            *addr |= mask;
         else
-            *addr++ &= ~mask;
+            *addr &= ~mask;
         color >>= 1;
     }
 }

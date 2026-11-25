@@ -148,7 +148,6 @@ static char *dopath(DND *p, char *buf, int *len);
 static DND *makdnd(DND *p, FCB *fcb);
 static DND *dcrack(const char **np);
 static int getpath(const char *p, char *d, int dirspec);
-static BOOL match(char *s1, char *s2);
 static void makbuf(FCB *f, DTAINFO *dt);
 static DND *getdnd(char *n, DND *d);
 static void snipdnd(DND *dnd);
@@ -312,6 +311,9 @@ long xrmdir(char *p)
         return EACCDN;
     /*  end M01.01.SCC.FS.09  */
 
+    if (IS_AMIGA_DMD(d->d_drv))             /* Amiga volumes are read-only */
+        return EACCDN;
+
     /*
      * scan actual directory to make sure it's empty
      */
@@ -402,6 +404,7 @@ long xrmdir(char *p)
 long xchmod(char *p, int wrt, UBYTE mod)
 {
     OFD *fd;
+    FCB *fcb;
     DND *dn;                                /*  M01.01.03   */
     const char *s;
     long pos;
@@ -412,8 +415,11 @@ long xchmod(char *p, int wrt, UBYTE mod)
 
     pos = 0;
 
-    if (!scan(dn, s, FA_NORM, &pos))        /*  M01.01.03   */
+    if (!(fcb = scan(dn, s, FA_NORM, &pos)))    /*  M01.01.03   */
         return EFILNF;
+
+    if (IS_AMIGA_DMD(dn->d_drv))            /* Amiga volumes are read-only */
+        return wrt ? EACCDN : fcb->f_attrib;
 
     /*
      * disallow attempts to set invalid bits for an ordinary file
@@ -474,7 +480,13 @@ long ixsfirst(char *name, WORD att, DTAINFO *addr)
     {
         OFD *ofd = dn->d_ofd;
         memcpy(addr->dt_name, s, FNAMELEN+1);   /* filename + attr */
-        if (!ofd->o_dnode)              /* i.e. root directory */
+        if (IS_AMIGA_DMD(dn->d_drv))    /* position is a block number */
+        {
+            addr->dt_offset_drive = 0L;
+            addr->dt_cloffset = (ULONG)pos >> 16;
+            addr->dt_clnum = pos;
+        }
+        else if (!ofd->o_dnode)         /* i.e. root directory */
         {
             addr->dt_offset_drive = pos;
             addr->dt_cloffset = 0;
@@ -561,6 +573,15 @@ static FCB *ixsnext(DTAINFO *dt)
     name[FNAMELEN] = dt->dt_attr;
 
     dmd = drvtbl[drive];
+
+    if (IS_AMIGA_DMD(dmd))
+    {
+        offset = ((ULONG)dt->dt_cloffset << 16) | dt->dt_clnum;
+        fcb = amifs_next(dmd, name, &offset);
+        dt->dt_cloffset = (ULONG)offset >> 16;
+        dt->dt_clnum = offset;
+        return fcb;
+    }
 
     /*
      * determine starting point
@@ -693,6 +714,8 @@ long xgsdtof(DOSTIME *buf, int h, int wrt)
 
     if (wrt)
     {
+        if (IS_AMIGA_DMD(f->o_dmd))     /* Amiga volumes are read-only */
+            return EACCDN;
         swpcopyw(&buf->time, &dfd->o_td.time);
         swpcopyw(&buf->date, &dfd->o_td.date);
         dfd->o_flag |= O_DIRTY;         /* M01.01.0918.01 */
@@ -926,6 +949,8 @@ long xrename(int n, char *p1, char *p2)
      * of confusion with a real directory starting at cluster 2
      */
     dmd1 = dn1->d_drv;
+    if (IS_AMIGA_DMD(dmd1))             /* Amiga volumes are read-only */
+        return EACCDN;
     strtcl1 = dn1->d_parent ? dn1->d_strtcl : ROOT_PSEUDO_CLUSTER;
 
     /* scan DND for matching name
@@ -1532,6 +1557,9 @@ FCB *scan(DND *dnd, const char *n, WORD att, LONG *posp)
 
     KDEBUG(("scan(%p,'%s',0x%x,%p)\n",dnd,n,att,posp));
 
+    if (IS_AMIGA_DMD(dnd->d_drv))
+        return amifs_scan(dnd, n, att, posp);
+
     m = 0;                  /*  have_match = false                  */
     builds(n,name);         /*  format name into dir format         */
     name[FNAMELEN] = att;
@@ -1799,7 +1827,7 @@ static int getpath(const char *p, char *d, int dirspec)
  */
 /* char *s1  -   name we are checking */
 /* char *s2  -   name in fcb */
-static BOOL match(char *s1, char *s2)
+BOOL match(char *s1, char *s2)
 {
     int i;
 

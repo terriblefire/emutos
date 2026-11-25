@@ -431,7 +431,7 @@ long osif(short *pw);   /* called only from rwa.S */
 long osif(short *pw)
 {
     char **pb, *pb2, *p, ctmp;
-    BPB *b;
+    WORD login;
     DMD *dmd;
     DND *dn;
     int typ, h, i, fn;
@@ -468,17 +468,11 @@ restrt:
             mark_bcbs_invalid(errdrv);
 
             /* then, in with the new */
-            b = (BPB *)Getbpb(errdrv);
-            if (!b)
+            login = login_drive(errdrv);
+            if (login)
             {
                 drvsel &= ~(1L<<errdrv);
-                return rc;
-            }
-
-            if (log_media(b,errdrv))
-            {
-                drvsel &= ~(1L<<errdrv);
-                return ENSMEM;
+                return (login > 0) ? rc : ENSMEM;
             }
 
             rwerr = 0;

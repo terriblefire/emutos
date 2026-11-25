@@ -782,6 +782,7 @@ struct raster_t {
     int clip;
     int multifill;
     int transparent;
+    int s_planes;       /* number of planes in source form (set by setup_info) */
 };
 
 /*
@@ -918,15 +919,19 @@ setup_info (struct raster_t *raster, struct blit_frame * info)
     /* setup plane info for source MFDB */
     if ( src->fd_addr ) {
         /* for a positive source address */
+        raster->s_planes = src->fd_nplanes;
         info->s_form = src->fd_addr;
         info->s_nxwd = src->fd_nplanes * 2;
         info->s_nxln = src->fd_wdwidth * info->s_nxwd;
+        info->s_nxpl = 2;
     }
     else {
         /* source form is screen */
+        raster->s_planes = v_planes;
         info->s_form = (UWORD*) v_bas_ad;
-        info->s_nxwd = v_planes * 2;
+        info->s_nxwd = SCREEN_WORD_STEP * 2;
         info->s_nxln = v_lin_wr;
+        info->s_nxpl = SCREEN_PLANE_STEP * 2;
     }
 
     /* setup plane info for destination MFDB */
@@ -936,13 +941,15 @@ setup_info (struct raster_t *raster, struct blit_frame * info)
         info->plane_ct = dst->fd_nplanes;
         info->d_nxwd = dst->fd_nplanes * 2;
         info->d_nxln = dst->fd_wdwidth * info->d_nxwd;
+        info->d_nxpl = 2;
     }
     else {
         /* destination form is screen */
         info->d_form = (UWORD*) v_bas_ad;
         info->plane_ct = v_planes;
-        info->d_nxwd = v_planes * 2;
+        info->d_nxwd = SCREEN_WORD_STEP * 2;
         info->d_nxln = v_lin_wr;
+        info->d_nxpl = SCREEN_PLANE_STEP * 2;
 
         /* check if clipping is enabled, when destination is screen */
         if (raster->clip)
@@ -955,9 +962,6 @@ setup_info (struct raster_t *raster, struct blit_frame * info)
     }
     else
         dont_clip(info);
-
-    info->s_nxpl = 2;           /* next plane offset (source) */
-    info->d_nxpl = 2;           /* next plane offset (destination) */
 
 #if CONF_WITH_VDI_16BIT
     return (info->plane_ct <= 16) ? FALSE : TRUE;
@@ -1357,7 +1361,7 @@ cpy_raster(struct raster_t *raster, struct blit_frame *info)
         /* COPY RASTER OPAQUE */
 
         /* planes of source and destination equal in number? */
-        if (info->s_nxwd != info->d_nxwd)
+        if (raster->s_planes != info->plane_ct)
             return;
 
         info->op_tab[0] = mode; /* fg:0 bg:0 */
@@ -1381,7 +1385,7 @@ cpy_raster(struct raster_t *raster, struct blit_frame *info)
          */
 
         /* is source area one plane? */
-        if (info->s_nxwd != 2)
+        if (raster->s_planes != 1)
             return;             /* source must be mono plane */
 
         info->s_nxpl = 0;       /* use only one plane of source */

@@ -41,13 +41,25 @@ struct IDE
 
 #define ide_interface ((volatile struct IDE*)0x00da0000)
 
+/*
+ * The TF4060 accelerator has its own IDE port with the same register layout
+ * as Gayle IDE.  Its control registers are decoded at a fixed address, so
+ * they can be probed before autoconfig.
+ */
+#define tf4060_ide_interface ((volatile struct IDE*)0x00e94000)
+#define TF4060_BUILD_ID_REG  0x00e9006cUL
+#define TF4060_BUILD_ID      0x62
+
 extern const UBYTE scancode_atari_from_amiga[128];
 extern UWORD amiga_screen_width;
 extern UWORD amiga_screen_width_in_bytes;
 extern UWORD amiga_screen_height;
+extern UWORD amiga_screen_planes;
+extern UWORD amiga_screen_line_bytes;
 extern const UBYTE *amiga_screenbase;
 extern UWORD *copper_list;
 extern int has_gayle;
+extern int has_tf4060_ide;
 
 void amiga_machine_detect(void);
 const char *amiga_machine_name(void);

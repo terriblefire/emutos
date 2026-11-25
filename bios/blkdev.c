@@ -145,7 +145,7 @@ static void pun_info_setup(void)
             blkdev_getbpb(i);           /* force boot sector scan & BPB rebuild */
             pun_info.pun[i] = physdev;
             pun_info.partition_start[i] = dev->start;
-            if (dev->flags & GETBPB_ALLOWED)
+            if (dev->flags & (GETBPB_ALLOWED|AMIGA_PARTITION))
                 if (dev->bpb.recsiz > max_size)
                     max_size = dev->bpb.recsiz;
             if (++i >= PUN_MAXUNITS)    /* cannot store info for devices > P: */
@@ -396,6 +396,25 @@ int add_partition(UWORD unit, LONG *devices_available, char id[], ULONG start, U
     return 0;
 }
 
+#if CONF_WITH_AMIGA_FS
+/*
+ * Add an Amiga RDB partition: like add_partition(), but also records the
+ * filesystem parameters needed by the BDOS
+ */
+int add_amiga_partition(UWORD unit, LONG *devices_available, char id[], ULONG start, ULONG size, const AMIGA_PARTINFO *info)
+{
+    int logical = next_logical(devices_available);
+
+    if (add_partition(unit, devices_available, id, start, size) < 0)
+        return -1;
+
+    blkdev[logical].amiga = *info;
+    blkdev[logical].flags |= AMIGA_PARTITION;
+
+    return 0;
+}
+#endif
+
 
 /*
  * blkdev_rwabs - BIOS block device read/write vector
@@ -560,6 +579,25 @@ WORD get_shift(ULONG blocksize)
 }
 
 
+#if CONF_WITH_AMIGA_FS
+/*
+ * blkdev_amiga_partinfo - return the Amiga partition parameters for a
+ * logical drive, or NULL if it is not an Amiga partition
+ */
+const AMIGA_PARTINFO *blkdev_amiga_partinfo(WORD dev)
+{
+    BLKDEV *bdev = blkdev + dev;
+
+    if ((dev < 0) || (dev >= BLKDEVNUM))
+        return NULL;
+    if ((bdev->flags & (DEVICE_VALID|AMIGA_PARTITION)) != (DEVICE_VALID|AMIGA_PARTITION))
+        return NULL;
+
+    return &bdev->amiga;
+}
+#endif
+
+
 /*
  * blkdev_getbpb - Get BIOS parameter block
  *
@@ -599,6 +637,14 @@ LONG blkdev_getbpb(WORD dev)
      * before blkdev_getbpb() actually reads the value.
      */
     bdev->bpb.recsiz = (unit < NUMFLOPPIES) ? SECTOR_SIZE : 0;
+#if CONF_WITH_AMIGA_FS
+    /*
+     * Amiga partitions have no BPB, but the BDOS accesses them via
+     * logical Rwabs() using the filesystem block as the logical sector
+     */
+    if (bdev->flags & AMIGA_PARTITION)
+        bdev->bpb.recsiz = bdev->amiga.blocksize;
+#endif
 
     /*
      * before we can build the BPB, we need to locate the bootsector.

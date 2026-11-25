@@ -346,6 +346,9 @@ long xgetfree(long *buf, int drv)
         return ERR;
 
     dm = drvtbl[n];
+    if (IS_AMIGA_DMD(dm))
+        return amifs_getfree(buf, dm);
+
     if (dm->m_16)
     {
         free = countfree16(dm);

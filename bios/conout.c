@@ -25,7 +25,7 @@
 #include "conout.h"
 #include "../vdi/vdi_defs.h"    /* for phys_work stuff */
 
-#define PLANE_OFFSET    2       /* interleaved planes */
+#define PLANE_OFFSET    (SCREEN_PLANE_STEP * 2) /* bytes to same byte in next plane */
 
 #if CONF_WITH_VIDEL
 static const UWORD falcon_default_palette[16] = {
@@ -108,9 +108,9 @@ static UBYTE *cell_addr(UWORD x, UWORD y)
          * v_planes cannot be more than 8, so as long as there are no more
          * than 4000 characters per line, the result will fit in a word ...
          *
-         * X displacement = even(X) * v_planes + Xmod2
+         * X displacement = even(X) * words to next word in plane + Xmod2
          */
-        disx = v_planes * (x & ~1);
+        disx = SCREEN_WORD_STEP * (x & ~1);
         if (IS_ODD(x)) {        /* Xmod2 = 0 ? */
             disx++;             /* Xmod2 = 1 */
         }
@@ -374,7 +374,7 @@ static BOOL next_cell(void)
     }
 
     /* new cell (1st plane), added offset to next word in plane */
-    v_cur_ad += (v_planes << 1) - 1;
+    v_cur_ad += (SCREEN_WORD_STEP << 1) - 1;
 
     return 0;                           /* indicate no wrap needed */
 }
@@ -598,7 +598,10 @@ static void blank_out16(int topx, int topy, int botx, int boty)
 void blank_out(int topx, int topy, int botx, int boty)
 {
     UWORD color;
-    int pair, pairs, row, rows, offs;
+    int pair, pairs, row, rows;
+#if !CONF_WITH_LINE_INTERLEAVED_PLANES
+    int offs;
+#endif
     UBYTE *addr;
 
 #if CONF_WITH_VIDEL
@@ -619,8 +622,10 @@ void blank_out(int topx, int topy, int botx, int boty)
      */
     pairs = (botx - topx + 1) / 2;      /* pairs of characters */
 
+#if !CONF_WITH_LINE_INTERLEAVED_PLANES
     /* calculate the BYTE offset from the end of one row to next start */
     offs = v_lin_wr - pairs * 2 * v_planes;
+#endif
 
     /*
      * # of lines in region - 1
@@ -629,6 +634,28 @@ void blank_out(int topx, int topy, int botx, int boty)
      */
     rows = (boty - topy + 1) * v_cel_ht;
 
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+    {
+        /* each plane of a scan line is contiguous: fill one word per pair */
+        UWORD pl[8];            /* bits on screen for 8 planes max */
+        UWORD i;
+
+        for (i = 0; i < v_planes; i++, color >>= 1)
+            pl[i] = (color & 0x0001) ? 0xffff : 0x0000;
+
+        /* do all rows in region */
+        for (row = rows; row--; addr += v_lin_wr) {
+            UWORD *p = (UWORD *)addr;
+
+            for (i = 0; i < v_planes; i++, p += SCREEN_PLANE_STEP) {
+                UWORD *q = p;
+
+                for (pair = pairs; pair--;)
+                    *q++ = pl[i];
+            }
+        }
+    }
+#else
     if (v_planes > 1) {
         /* Color modes are optimized for handling 2 planes at once */
         ULONG pair_planes[4];        /* bits on screen for 8 planes max */
@@ -681,6 +708,7 @@ void blank_out(int topx, int topy, int botx, int boty)
             addr += offs;       /* skip non-region area with stride advance */
         }
     }
+#endif /* CONF_WITH_LINE_INTERLEAVED_PLANES */
 }
 
 

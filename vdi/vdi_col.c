@@ -31,6 +31,21 @@ static const WORD MAP_COL_ROM[] =
 /*
  * the following factors are used in adjust_mono_values()
  */
+/*
+ * CONF_WITH_STE_PALETTE is set if the palette may use 4 bits per colour
+ * component, in STe format.  This includes the Amiga, which uses the STe
+ * format for its palette.
+ */
+#if CONF_WITH_STE_SHIFTER
+# define CONF_WITH_STE_PALETTE  1
+# define HAS_STE_PALETTE        has_ste_shifter
+#elif defined(MACHINE_AMIGA)
+# define CONF_WITH_STE_PALETTE  1
+# define HAS_STE_PALETTE        1
+#else
+# define CONF_WITH_STE_PALETTE  0
+#endif
+
 #define STE_MONO_FUDGE_FACTOR   0x43
 #define ST_MONO_FUDGE_FACTOR    0x8e
 
@@ -220,7 +235,7 @@ static const WORD st2vdi_lookup_table[8] =
     { 0, 142, 285, 428, 571, 714, 857, 1000 };
 
 
-#if CONF_WITH_STE_SHIFTER
+#if CONF_WITH_STE_PALETTE
 /* Create an STe color value from VDI color */
 static int vdi2ste(int col)
 {
@@ -492,8 +507,8 @@ static WORD adjust_mono_values(WORD colnum,WORD *rgb)
 {
     WORD i, sum, fudge = ST_MONO_FUDGE_FACTOR;
 
-#if CONF_WITH_STE_SHIFTER
-    if (has_ste_shifter)
+#if CONF_WITH_STE_PALETTE
+    if (HAS_STE_PALETTE)
         fudge = STE_MONO_FUDGE_FACTOR;
 #endif
 
@@ -564,8 +579,8 @@ static void set_color(WORD colnum, WORD *rgb)
         b = rgb[2];
     }
 
-#if CONF_WITH_STE_SHIFTER
-    if (has_ste_shifter)
+#if CONF_WITH_STE_PALETTE
+    if (HAS_STE_PALETTE)
     {
         r = vdi2ste(r);
         g = vdi2ste(g);
@@ -916,8 +931,8 @@ void vdi_vq_color(Vwk *vwk)
         return;
     }
 #endif
-#if CONF_WITH_STE_SHIFTER
-    if (has_ste_shifter)
+#if CONF_WITH_STE_PALETTE
+    if (HAS_STE_PALETTE)
     {
         c = Setcolor(hwreg, -1);
         INTOUT[1] = ste2vdi(c >> 8);

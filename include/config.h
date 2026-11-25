@@ -567,6 +567,9 @@
  */
 #ifdef TARGET_AMIGA_ROM
 # define MACHINE_AMIGA
+# ifndef AMIGA_ROM_SIZE_KB
+#  define AMIGA_ROM_SIZE_KB 256 /* 256 or 512, ROM ends at 0x01000000 */
+# endif
 #endif
 
 /*
@@ -589,6 +592,10 @@
 # ifndef CONF_WITH_UAE
 #  define CONF_WITH_UAE 1
 # endif
+# ifndef CONF_WITH_LINE_INTERLEAVED_PLANES
+#  define CONF_WITH_LINE_INTERLEAVED_PLANES 1
+# endif
+# define AMIGA_MAX_PLANES 4 /* maximum supported by OCS in high resolution */
 #endif
 
 /*
@@ -1055,6 +1062,32 @@
  */
 #ifndef CONF_WITH_SDMMC
 # define CONF_WITH_SDMMC 0
+#endif
+
+/*
+ * Set CONF_WITH_LINE_INTERLEAVED_PLANES to 1 if the screen bit planes are
+ * line-interleaved (Amiga style: each scan line contains the whole row of
+ * plane 0, then the whole row of plane 1, etc.) instead of word-interleaved
+ * (Atari style: for each group of 16 pixels, one word per plane).
+ */
+#ifndef CONF_WITH_LINE_INTERLEAVED_PLANES
+# define CONF_WITH_LINE_INTERLEAVED_PLANES 0
+#endif
+
+/*
+ * Set CONF_WITH_ROMDISK to 1 to activate a read-only disk whose image is
+ * linked into the ROM. The image file is passed via ROMDISK_IMAGE.
+ */
+#ifndef CONF_WITH_ROMDISK
+# define CONF_WITH_ROMDISK 0
+#endif
+
+/*
+ * Set CONF_WITH_AMIGA_FS to 1 to recognise Amiga Rigid Disk Block (RDB)
+ * partitions and give read-only GEMDOS access to the OFS/FFS volumes on them
+ */
+#ifndef CONF_WITH_AMIGA_FS
+# define CONF_WITH_AMIGA_FS 0
 #endif
 
 /*
@@ -2091,6 +2124,15 @@
 #if !DETECT_NATIVE_FEATURES
 # if CONF_WITH_ARANYM
 #  error CONF_WITH_ARANYM requires DETECT_NATIVE_FEATURES.
+# endif
+#endif
+
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+# if CONF_WITH_BLITTER
+#  error CONF_WITH_LINE_INTERLEAVED_PLANES is incompatible with CONF_WITH_BLITTER.
+# endif
+# if CONF_WITH_VDI_16BIT
+#  error CONF_WITH_LINE_INTERLEAVED_PLANES is incompatible with CONF_WITH_VDI_16BIT.
 # endif
 #endif
 

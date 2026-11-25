@@ -253,18 +253,26 @@ static const WORD amigamode_from_button[] =
 };
 #define NUM_AMIGA_BUTTONS ARRAY_SIZE(amigamode_from_button)
 
+/* The colour buttons are in VIDEL_1BPP, VIDEL_2BPP, VIDEL_4BPP order */
+#define NUM_AMIGA_COLOR_BUTTONS 3
+
+/* Geometry of a video mode, i.e. without colour depth or ST compatibility */
+#define AMIGA_GEOMETRY(mode) ((mode) & ~(VIDEL_BPPMASK|VIDEL_COMPAT))
+
 static int change_amiga_rez(WORD *newres,WORD *newmode)
 {
 OBJECT *tree, *obj;
-int i, selected;
+int i, selected, color, selected_color;
 WORD oldmode;
 
     oldmode = amiga_vgetmode();
 
     for (i = 0; i < NUM_AMIGA_BUTTONS; i++)
-        if (oldmode == amigamode_from_button[i])
+        if ((amigamode_from_button[i] != -1)
+         && (AMIGA_GEOMETRY(oldmode) == AMIGA_GEOMETRY(amigamode_from_button[i])))
             break;
     selected = i;
+    selected_color = oldmode & VIDEL_BPPMASK;
 
     /* set up dialog & display */
     tree = desk_rs_trees[ADAMIREZ];
@@ -283,20 +291,27 @@ WORD oldmode;
         else obj->ob_state &= ~SELECTED;
     }
 
+    for (i = 0, obj = tree+AMICOL0; i < NUM_AMIGA_COLOR_BUTTONS; i++, obj++) {
+        if (i == selected_color)
+            obj->ob_state |= SELECTED;
+        else obj->ob_state &= ~SELECTED;
+    }
+
     inf_show(tree,ROOT);
 
     if (inf_what(tree,AMREZOK) == 0)
         return 0;
 
-    /* look for button with SELECTED state */
+    /* look for buttons with SELECTED state */
     i = inf_gindex(tree,AMIREZ0,NUM_AMIGA_BUTTONS);
-    if (i < 0)                  /* paranoia */
+    color = inf_gindex(tree,AMICOL0,NUM_AMIGA_COLOR_BUTTONS);
+    if ((i < 0) || (color < 0)) /* paranoia */
         return 0;
-    if (i == selected)          /* no change */
+    if ((i == selected) && (color == selected_color))   /* no change */
         return 0;
 
     *newres = FALCON_REZ;
-    *newmode = amigamode_from_button[i];
+    *newmode = AMIGA_GEOMETRY(amigamode_from_button[i]) | color;
 
     return 1;
 }

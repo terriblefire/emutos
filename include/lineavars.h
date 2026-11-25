@@ -57,6 +57,19 @@ extern UWORD V_REZ_HZ;          /* screen horizontal resolution */
 extern UWORD V_REZ_VT;          /* screen vertical resolution */
 extern UWORD BYTES_LIN;         /* width of line in bytes */
 
+/*
+ * Screen bit plane layout. In both layouts, a scan line is v_lin_wr bytes.
+ *  SCREEN_WORD_STEP:  distance in WORDs to the next word of the same plane
+ *  SCREEN_PLANE_STEP: distance in WORDs to the same word of the next plane
+ */
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+# define SCREEN_WORD_STEP   1
+# define SCREEN_PLANE_STEP  (V_REZ_HZ >> 4)
+#else
+# define SCREEN_WORD_STEP   v_planes
+# define SCREEN_PLANE_STEP  1
+#endif
+
 extern WORD DEV_TAB[];          /* intout array for open workstation */
 
 extern WORD MOUSE_BT;           /* mouse button state */

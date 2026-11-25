@@ -16,6 +16,7 @@
 
         .extern _amiga_rs232_rbf_interrupt
         .extern _amiga_screen_width_in_bytes
+        .extern _amiga_screen_line_bytes
         .extern _amiga_screenbase
         .extern _amiga_is_ntsc
         .extern _int_vbl
@@ -251,7 +252,7 @@ amiga_int_5_end:
 
         .globl  _amiga_vbl
 _amiga_vbl:
-        movem.l d0-d1/a0-a1,-(sp)
+        movem.l d0-d2/a0-a1,-(sp)
 
         move.w  0xdff01e,d0             // INTREQR
         btst    #5,d0                   // VBL interrupt?
@@ -263,14 +264,27 @@ _amiga_vbl:
         jmi     setcopper               // LOF = 1, odd field: start at line 1
 
         moveq   #0,d1
-        move.w  _amiga_screen_width_in_bytes,d1
+        move.w  _amiga_screen_line_bytes,d1
         add.l   d1,d0                   // LOF = 0, even field: start at line 2
 
 setcopper:
+        // Planes are line-interleaved: each plane starts one plane row
+        // after the previous one. The Copper list layout is defined in
+        // amiga_screen_init(): a 2-word wait, then for each plane:
+        // BPLxPTH, high word, BPLxPTL, low word.
+        moveq   #0,d1
+        move.w  _amiga_screen_width_in_bytes,d1
         move.l  _copper_list,a0
-        move.w  d0,10(a0)               // BPL1PTL
+        addq.l  #4,a0                   // skip the wait instruction
+        moveq   #AMIGA_MAX_PLANES-1,d2
+setplane:
+        move.w  d0,6(a0)                // BPLxPTL
         swap    d0
-        move.w  d0,6(a0)                // BPL1PTH
+        move.w  d0,2(a0)                // BPLxPTH
+        swap    d0
+        add.l   d1,d0                   // next plane
+        addq.l  #8,a0
+        dbra    d2,setplane
 
         jbsr    _int_vbl                // Call the standard VBL handler
 
@@ -281,7 +295,7 @@ setcopper:
         move.w  #0x0020,0xdff09c        // Twice for compatibility
 
 amivblend:
-        movem.l (sp)+,d0-d1/a0-a1
+        movem.l (sp)+,d0-d2/a0-a1
         rte
 
 #endif /* MACHINE_AMIGA */

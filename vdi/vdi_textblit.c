@@ -94,7 +94,11 @@ typedef struct {
     UBYTE *dform;           /* start of destination form */
     UBYTE *sform;           /* start of source form */
     WORD unused2;           /* was buffc */
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+    WORD nextpln;           /* offset to same word in next plane */
+#else
     WORD unused4;           /* was buffb */
+#endif
     WORD buffa;             /* for clip & prerotate blt */
 } LOCALVARS;
 
@@ -947,13 +951,13 @@ void direct_screen_blit(WORD count, WORD *str)
                 }
                 break;
             }
-            dst += sizeof(WORD);    /* next plane */
+            dst += SCREEN_PLANE_STEP * sizeof(WORD);    /* next plane */
             forecol >>= 1;
         }
         dst = save_dst + 1;
         if (!IS_ODD_POINTER(dst))   /* must go to next screen word */
         {
-            dst += (v_planes-1)*sizeof(WORD);
+            dst += (SCREEN_WORD_STEP-1)*sizeof(WORD);
         }
     }
 }
@@ -1195,7 +1199,10 @@ static void screen_blit(LOCALVARS *vars)
     vars->forecol = TEXTFG;
     vars->ambient = 0;          /* logically TEXTBG, but that isn't set up by the VDI */
     vars->nbrplane = v_planes;
-    vars->nextwrd = vars->nbrplane * sizeof(WORD);
+    vars->nextwrd = SCREEN_WORD_STEP * sizeof(WORD);
+#if CONF_WITH_LINE_INTERLEAVED_PLANES
+    vars->nextpln = SCREEN_PLANE_STEP * sizeof(WORD);
+#endif
     vars->height = vars->DELY;
     vars->width = vars->DELX;
 

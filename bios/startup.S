@@ -59,7 +59,11 @@
 #endif
 
 #if defined(MACHINE_AMIGA) && !EMUTOS_LIVES_IN_RAM
+#if AMIGA_ROM_SIZE_KB == 512
+    .dc.w   0x1114      // 512 KB ROM
+#else
     .dc.w   0x1111      // 256 KB ROM
+#endif
     .dc.w   0x4ef9      // jmp
     .dc.l   amiga_main  // pc at power on or after physical reset
 

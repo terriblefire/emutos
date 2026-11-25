@@ -30,6 +30,7 @@
  */
 
 #define FNAMELEN    (LEN_ZNODE+LEN_ZEXT)    /* as found in dirs etc */
+#define CNTMAX      0x7FFFul        /* max records per Rwabs() (16-bit MAXINT) */
 
 /*
  * the following values are used by Atari TOS:
@@ -259,7 +260,20 @@ struct _dmd         /* drive media block */
     DND    *m_dtl;      /* root of directory tree list          */
     UBYTE  m_16;        /* 16 bit fat ?                         */
     UBYTE  m_1fat;      /* 1 FAT only ?                         */
+#if CONF_WITH_AMIGA_FS
+    /* for Amiga volumes, m_recsiz is the filesystem block size */
+    ULONG  m_amiroot;   /* root block, 0 => this is a FAT volume */
+    ULONG  m_amiblocks; /* number of blocks in the partition    */
+    UWORD  m_amireserved;/* number of reserved blocks           */
+    UBYTE  m_amitype;   /* low byte of DosType (DOS\0...DOS\5) */
+#endif
 } ;
+
+#if CONF_WITH_AMIGA_FS
+# define IS_AMIGA_DMD(dm)   ((dm)->m_amiroot != 0)
+#else
+# define IS_AMIGA_DMD(dm)   0
+#endif
 
 
 
@@ -366,8 +380,11 @@ extern  FTAB    sft[];
 /* check the drive, see if it needs to be logged in. */
 WORD ckdrv(int d, BOOL checkrem);
 
-/* log in media 'b' on drive 'drv'. */
-WORD log_media(BPB *b, int drv);
+/* allocate a DMD and its root DND for drive 'drv' */
+DMD *getdmd(int drv);
+
+/* log in the media on drive 'drv'. */
+WORD login_drive(int drv);
 
 /*
  * in fshand.c
@@ -442,6 +459,7 @@ long ixread(OFD *p, long len, void *ubufr);
 
 long xwrite(int h, long len, void *ubufr);
 long ixwrite(OFD *p, long len, void *ubufr);
+void usrio(int rwflg, int num, long strt, char *ubuf, DMD *dm);
 
 /*
  * in fsdir.c
@@ -465,6 +483,7 @@ int incr_curdir_usage(DND *dnd);
 void decr_curdir_usage(int index);
 OFD *makofd(DND *p);
 WORD free_available_dnds(void);
+BOOL match(char *s1, char *s2);
 
 
 /*
@@ -475,6 +494,17 @@ void xsetdta(DTAINFO *addr);
 long xsetdrv(int drv);
 long xgetdrv(void);
 OFD  *getofd(int h);
+
+
+/*
+ * in amigafs.c
+ */
+WORD amifs_mount(int drv);
+FCB *amifs_scan(DND *dnd, const char *n, WORD att, LONG *posp);
+FCB *amifs_next(DMD *dm, char *pattern, LONG *posp);
+ULONG amifs_fcbkey(const FCB *fcb);
+long amifs_read(OFD *p, long len, char *ubufr);
+long amifs_getfree(long *buf, DMD *dm);
 
 
 /*

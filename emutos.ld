@@ -21,7 +21,7 @@ OUTPUT_FORMAT(binary)
 
 /* The ROM address depends on the target */
 #if defined(MACHINE_AMIGA)
-# define ROM_ORIGIN 0x00fc0000
+# define ROM_ORIGIN (0x01000000 - AMIGA_ROM_SIZE_KB * 1024)
 #elif defined(TARGET_CART)
 # define ROM_ORIGIN 0x00fa0000
 #elif defined(TARGET_192)

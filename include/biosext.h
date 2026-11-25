@@ -82,6 +82,20 @@ extern void (*mousexvec)(WORD scancode);    /* Additional mouse buttons */
 /* Line A extensions */
 extern UBYTE v_planes_shift; /* pixel to address helper */
 
+#if CONF_WITH_AMIGA_FS
+/* filesystem parameters of a partition found in an Amiga Rigid Disk Block */
+typedef struct
+{
+    ULONG dostype;      /* e.g. 'DOS\1' */
+    ULONG blocks;       /* partition size in filesystem blocks */
+    ULONG reserved;     /* number of reserved blocks at the start */
+    UWORD blocksize;    /* filesystem block size in bytes */
+} AMIGA_PARTINFO;
+
+/* return the Amiga partition parameters for a logical drive, or NULL */
+const AMIGA_PARTINFO *blkdev_amiga_partinfo(WORD dev);
+#endif
+
 /* determine monitor type, ... */
 WORD get_monitor_type(void);
 WORD get_palette(void);

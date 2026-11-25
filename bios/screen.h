@@ -18,6 +18,25 @@
 #define TT_VRAM_SIZE        153600UL
 #define FALCON_VRAM_SIZE    368640UL    /* 768x480x256 (including overscan) */
 
+/* palette color definitions */
+
+#define RGB_BLACK     0x0000            /* ST(e) palette */
+#define RGB_BLUE      0x000f
+#define RGB_GREEN     0x00f0
+#define RGB_CYAN      0x00ff
+#define RGB_RED       0x0f00
+#define RGB_MAGENTA   0x0f0f
+#define RGB_LTGRAY    0x0555
+#define RGB_GRAY      0x0333
+#define RGB_LTBLUE    0x033f
+#define RGB_LTGREEN   0x03f3
+#define RGB_LTCYAN    0x03ff
+#define RGB_LTRED     0x0f33
+#define RGB_LTMAGENTA 0x0f3f
+#define RGB_YELLOW    0x0ff0
+#define RGB_LTYELLOW  0x0ff3
+#define RGB_WHITE     0x0fff
+
 #if CONF_WITH_ATARI_VIDEO
 
 #define VIDEOBASE_ADDR_HI   0xffff8201L
@@ -51,24 +70,6 @@ WORD egetpalette(WORD index,WORD count,UWORD *rgb);
 WORD esetgray(WORD mode);
 WORD esetsmear(WORD mode);
 
-/* palette color definitions */
-
-#define RGB_BLACK     0x0000            /* ST(e) palette */
-#define RGB_BLUE      0x000f
-#define RGB_GREEN     0x00f0
-#define RGB_CYAN      0x00ff
-#define RGB_RED       0x0f00
-#define RGB_MAGENTA   0x0f0f
-#define RGB_LTGRAY    0x0555
-#define RGB_GRAY      0x0333
-#define RGB_LTBLUE    0x033f
-#define RGB_LTGREEN   0x03f3
-#define RGB_LTCYAN    0x03ff
-#define RGB_LTRED     0x0f33
-#define RGB_LTMAGENTA 0x0f3f
-#define RGB_YELLOW    0x0ff0
-#define RGB_LTYELLOW  0x0ff3
-#define RGB_WHITE     0x0fff
 
 #define TTRGB_BLACK     0x0000          /* TT palette */
 #define TTRGB_BLUE      0x000f
